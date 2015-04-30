@@ -21,3 +21,7 @@ target/
 # test data
 20_newsgroups_subset
 20_newsgroups_subset.zip
+topics.zip
+topics
+
+newsgroups_index
