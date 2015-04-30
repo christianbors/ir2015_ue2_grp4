@@ -24,12 +24,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
@@ -61,7 +64,7 @@ public class SearchFiles {
         String queries = null;
         int repeat = 0;
         boolean raw = false;
-        String queryString = null;
+//        String queryString = null;
         int hitsPerPage = 10;
 
         for (int i = 0; i < args.length; i++) {
@@ -74,9 +77,9 @@ public class SearchFiles {
             } else if ("-queries".equals(args[i])) {
                 queries = args[i + 1];
                 i++;
-            } else if ("-query".equals(args[i])) {
-                queryString = args[i + 1];
-                i++;
+//            } else if ("-query".equals(args[i])) {
+//                queryString = args[i + 1];
+//                i++;
             } else if ("-repeat".equals(args[i])) {
                 repeat = Integer.parseInt(args[i + 1]);
                 i++;
@@ -104,6 +107,10 @@ public class SearchFiles {
         }
         QueryParser parser;
         String line;
+        String queryString = "";
+        List<String> fields = new LinkedList<>();
+        fields.add("contents");
+
         while ((line = in.readLine()) != null) {
             if (queries == null && queryString == null) {                        // prompt the user
                 System.out.println("Enter query: ");
@@ -118,33 +125,46 @@ public class SearchFiles {
                     if (line.substring(0, line.indexOf(":")).contains(" ")) {
                         line = line.replace(":", "-");
                     } else {
-                        field = line.substring(0, line.indexOf(":"));
-                        line = line.substring(line.indexOf(":") + 2, line.length()).replace(":", "-");
+                        // determine field if it is in any way specific and add it to the list of fields
+                        // to further use it in the MultiFieldQueryParser
+                        field = line.substring(0, line.indexOf(":")).toLowerCase();
+                        fields.add(field);
+
+                        line = line.substring(line.indexOf(":") + 2, line.length());
+                        if (field.equals("path")) {
+                            line = line.replace("!", "+");
+                        } else {
+                            line.replace(":", "-");
+                        }
                     }
                 }
 
                 if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date") && line.matches(".*[a-zA-Z]+.*")) {
-                    parser = new QueryParser(field, analyzer);
-                    Query query = parser.parse(line);
-                    System.out.println("Searching for: " + query.toString(field));
-
-                    if (repeat > 0) {                           // repeat & time as benchmark
-                        Date start = new Date();
-                        for (int i = 0; i < repeat; i++) {
-                            searcher.search(query, 100);
-                        }
-                        Date end = new Date();
-                        System.out.println("Time: " + (end.getTime() - start.getTime()) + "ms");
+                    if (!queryString.isEmpty()) {
+                        queryString += " OR ";
                     }
-
-                    doPagingSearch(in, searcher, query, hitsPerPage, raw, queries == null && queryString == null);
-
-                    if (queryString != null) {
-                        break;
-                    }
+                    queryString += field + ":(" + line + ")";
                 }
             }
         }
+
+        MultiFieldQueryParser multiFieldQueryParser = new MultiFieldQueryParser(fields.toArray(new String[0]), analyzer);
+        Query query = multiFieldQueryParser.parse(queryString);
+//        parser = new QueryParser(field, analyzer);
+//        Query query = parser.parse(queryString);
+        System.out.println("Searching for: " + query.toString(field));
+
+        if (repeat > 0) {                           // repeat & time as benchmark
+            Date start = new Date();
+            for (int i = 0; i < repeat; i++) {
+                searcher.search(query, 100);
+            }
+            Date end = new Date();
+            System.out.println("Time: " + (end.getTime() - start.getTime()) + "ms");
+        }
+
+        doPagingSearch(in, searcher, query, hitsPerPage, raw, queries == null && queryString == null);
+
         reader.close();
     }
 
