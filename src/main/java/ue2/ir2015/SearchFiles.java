@@ -34,6 +34,7 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.flexible.standard.QueryParserUtil;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -65,7 +66,7 @@ public class SearchFiles {
         int repeat = 0;
         boolean raw = false;
 //        String queryString = null;
-        int hitsPerPage = 10;
+        int hitsPerPage = 100;
 
         for (int i = 0; i < args.length; i++) {
             if ("-index".equals(args[i])) {
@@ -105,7 +106,7 @@ public class SearchFiles {
         } else {
             in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         }
-        QueryParser parser;
+
         String line;
         String queryString = "";
         List<String> fields = new LinkedList<>();
@@ -120,38 +121,39 @@ public class SearchFiles {
             line = line.trim();
             if (line.length() > 0) {
 
+                System.out.println(line);
                 field = "contents";
                 if (line.contains(":")) {
-                    if (line.substring(0, line.indexOf(":")).contains(" ")) {
-                        line = line.replace(":", "-");
-                    } else {
+                    if (!line.substring(0, line.indexOf(":")).contains(" ")) {
                         // determine field if it is in any way specific and add it to the list of fields
                         // to further use it in the MultiFieldQueryParser
                         field = line.substring(0, line.indexOf(":")).toLowerCase();
-                        fields.add(field);
+                        if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date")) {
+                            fields.add(field);
+                        }
 
                         line = line.substring(line.indexOf(":") + 2, line.length());
-                        if (field.equals("path")) {
-                            line = line.replace("!", "+");
-                        } else {
-                            line.replace(":", "-");
-                        }
                     }
+                    if (field.equals("path")) {
+                        line = line.replace("!", " OR ");
+                    }
+
                 }
 
                 if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date") && line.matches(".*[a-zA-Z]+.*")) {
                     if (!queryString.isEmpty()) {
                         queryString += " OR ";
                     }
-                    queryString += field + ":(" + line + ")";
+                    // get rid of the dangerous escape characters in the content text
+                    queryString += field + ":(" + QueryParserUtil.escape(line) + ")";
                 }
             }
         }
 
-        MultiFieldQueryParser multiFieldQueryParser = new MultiFieldQueryParser(fields.toArray(new String[0]), analyzer);
-        Query query = multiFieldQueryParser.parse(queryString);
-//        parser = new QueryParser(field, analyzer);
-//        Query query = parser.parse(queryString);
+//        MultiFieldQueryParser multiFieldQueryParser = new MultiFieldQueryParser(fields.toArray(new String[0]), analyzer);
+//        Query query = multiFieldQueryParser.parse(QueryParserUtil.escape(queryString));
+        QueryParser parser = new QueryParser(field, analyzer);
+        Query query = parser.parse(queryString);
         System.out.println("Searching for: " + query.toString(field));
 
         if (repeat > 0) {                           // repeat & time as benchmark
