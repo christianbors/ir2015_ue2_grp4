@@ -29,6 +29,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.queryparser.flexible.standard.QueryParserUtil;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
@@ -171,16 +172,41 @@ public class IndexFiles {
                     if (line.substring(0, line.indexOf(":")).contains(" ")) {
                         line = line.replace(":", "-");
                     } else {
-                        field = line.substring(0, line.indexOf(":"));
+                        field = line.substring(0, line.indexOf(":")).toLowerCase();
                         if (line.length() > line.indexOf(":") + 2) {
-                            line = line.substring(line.indexOf(":") + 2, line.length()).replace(":", "-");
+                            line = QueryParserUtil.escape(line.substring(line.indexOf(":") + 2, line.length()));
                         } else {
                             continue;
                         }
                     }
                 }
-                if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date") && line.matches(".*[a-zA-Z]+.*")) {
+                if (field.equals("path")) {
+                    String[] paths = line.split("!");
+                    for (String path : paths) {
+                        doc.add(new StringField(field, path, Field.Store.YES));
+                    }
+                } else if (field.equals("newsgroups") || field.equals("keywords")) {
+                    String[] values = line.split(",");
+                    for (String value : values) {
+                        doc.add(new StringField(field, value, Field.Store.YES));
+                    }
+                } else if (field.equals("xref")) {
+                    String[] xrefs = line.split(" ");
+                    for (String xref : xrefs) {
+                        doc.add(new StringField(field, xref, Field.Store.YES));
+                    }
+                } else if (field.equals("references")) {
+                    String[] references = line.split(" |,");
+                    for (String ref : references) {
+                        doc.add(new StringField(field, ref, Field.Store.YES));
+                    }
+                }
+                else if (field.matches("date|from|message-id|organization|sender|followup-to|article-id|" +
+                        "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id")) {
                     doc.add(new TextField(field, line, Field.Store.YES));
+                }
+                else if (line.matches(".*[a-zA-Z]+.*")) {
+                    doc.add(new StringField(field, line, Field.Store.YES));
                 }
             }
             if (writer.getConfig().getOpenMode() == OpenMode.CREATE) {

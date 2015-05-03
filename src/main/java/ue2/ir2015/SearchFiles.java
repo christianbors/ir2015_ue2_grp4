@@ -30,13 +30,11 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.queryparser.flexible.standard.QueryParserUtil;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.FSDirectory;
 
@@ -100,7 +98,7 @@ public class SearchFiles {
         IndexReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(index)));
         IndexSearcher searcher = new IndexSearcher(reader);
         Analyzer analyzer = new StandardAnalyzer();
-        searcher.setSimilarity(new BM25Similarity());
+//        searcher.setSimilarity(new BM25Similarity());
 
         BufferedReader in = null;
         if (topicFilename != null) {
@@ -111,8 +109,7 @@ public class SearchFiles {
 
         String line;
         String queryString = "";
-        List<String> fields = new LinkedList<>();
-        fields.add("contents");
+        BooleanQuery booleanQuery = new BooleanQuery();
 
         while ((line = in.readLine()) != null) {
 
@@ -126,41 +123,73 @@ public class SearchFiles {
                         // determine field if it is in any way specific and add it to the list of fields
                         // to further use it in the MultiFieldQueryParser
                         field = line.substring(0, line.indexOf(":")).toLowerCase();
-                        if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date")) {
-                            fields.add(field);
+                        if (field.equals("article-i.d.")) {
+                            field = field.replace(".", "");
                         }
+                    }
 
+                    if (!field.equals("contents")) {
                         line = line.substring(line.indexOf(":") + 2, line.length());
                     }
-                    if (field.equals("path")) {
-                        line = line.replace("!", " OR ");
-                    }
-
                 }
 
-                if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date") && line.matches(".*[a-zA-Z]+.*")) {
-                    if (!queryString.isEmpty()) {
-                        queryString += " OR ";
+                if (field.equals("path")) {
+                    String[] paths = line.split("!");
+                    for (String path : paths) {
+                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, path)), BooleanClause.Occur.SHOULD));
                     }
-                    // get rid of the dangerous escape characters in the content text
-                    queryString += field + ":(" + QueryParserUtil.escape(line) + ")";
+                } else if (field.equals("newsgroups") || field.equals("keywords")) {
+                    String[] values = line.split(",");
+                    for (String value : values) {
+                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, value)), BooleanClause.Occur.SHOULD));
+                    }
+                } else if (field.equals("xref")) {
+                    String[] xrefs = line.split(" ");
+                    for (String xref : xrefs) {
+                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, xref)), BooleanClause.Occur.SHOULD));
+                    }
+                } else if (field.equals("references")) {
+                    String[] references = line.split(" |,");
+                    for (String ref : references) {
+                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, ref)), BooleanClause.Occur.SHOULD));
+                    }
+                } else if (field.matches("date|from|message-id|organization|sender|followup-to|article-id|" +
+                        "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id")) {
+                    Query tq = new TermQuery(new Term(field, line));
+                    booleanQuery.add(new BooleanClause(tq, BooleanClause.Occur.SHOULD));
+                } else if (!field.equals("lines")) {
+                    // ignore the field lines
+                    // field matches subject, or entry text
+                    booleanQuery.add(new BooleanClause(new QueryParser(field, analyzer)
+                            .parse(QueryParserUtil.escape(line)), BooleanClause.Occur.SHOULD));
                 }
+//
+////                if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date") && line.matches(".*[a-zA-Z]+.*")) {
+//                if (!field.toLowerCase().equals("lines") && line.matches(".*[a-zA-Z]+.*")) {
+//                    if (!queryString.isEmpty()) {
+//                        queryString += " OR ";
+//                    }
+//                    // get rid of the dangerous escape characters in the content text
+//                    queryString += field + ":(" + QueryParserUtil.escape(line) + ")";
+//                }
             }
         }
+//
+//        QueryParser parser = new QueryParser(field, analyzer);
+//        Query query = parser.parse(queryString);
+//
+//        bq.add(new BooleanClause(query, BooleanClause.Occur.SHOULD));
 
-        QueryParser parser = new QueryParser(field, analyzer);
-        Query query = parser.parse(queryString);
+//        if (repeat > 0) {                           // repeat & time as benchmark
+//            Date start = new Date();
+//            for (int i = 0; i < repeat; i++) {
+//                searcher.search(booleanQuery, 100);
+//            }
+//            Date end = new Date();
+//            System.out.println("Time: " + (end.getTime() - start.getTime()) + "ms");
+//        }
 
-        if (repeat > 0) {                           // repeat & time as benchmark
-            Date start = new Date();
-            for (int i = 0; i < repeat; i++) {
-                searcher.search(query, 100);
-            }
-            Date end = new Date();
-            System.out.println("Time: " + (end.getTime() - start.getTime()) + "ms");
-        }
-
-        doPagingSearch(in, searcher, query, topicFilename, hitsPerPage);
+        doPagingSearch(in, searcher, booleanQuery, topicFilename, hitsPerPage);
 
         reader.close();
     }
@@ -208,14 +237,14 @@ public class SearchFiles {
             for (int i = start; i < end; i++) {
 
                 Document doc = searcher.doc(hits[i].doc);
-                String path = doc.get("path");
+                String path = doc.get("path").replace("20_newsgroups_subset/", "");
                 if (path != null) {
                     String rank = topicFilename + " " +
                             "Q0 " +
                             path + " " +
                             (i + 1) + " " +
                             hits[i].score + " " +
-                            "bm25\n";
+                            "default\n";
 //                    System.out.println(rank);
                     writer.write(rank);
 //                    System.out.println((i + 1) + ". " + path);
