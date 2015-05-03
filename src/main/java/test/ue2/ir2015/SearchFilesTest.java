@@ -28,8 +28,8 @@ public class SearchFilesTest {
     @Test
     public void testMain() throws Exception {
         for (int i = 1; i <= 20; ++i) {
-//        int i = 20;
-            String[] param = {"-index", "newsgroups_index", "-queries", "topics/topic" + i};
+//        int i = 2;
+            String[] param = {"-index", "newsgroups_index", "-topic", "topic" + i};
             System.out.println("Search for Topic " + i);
             SearchFiles.main(param);
         }
