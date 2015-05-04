@@ -202,11 +202,11 @@ public class IndexFiles {
                     }
                 }
                 else if (field.matches("date|from|message-id|organization|sender|followup-to|article-id|" +
-                        "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id")) {
-                    doc.add(new TextField(field, line, Field.Store.YES));
+                        "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id|x-newsreader")) {
+                    doc.add(new StringField(field, line, Field.Store.YES));
                 }
                 else if (line.matches(".*[a-zA-Z]+.*")) {
-                    doc.add(new StringField(field, line, Field.Store.YES));
+                    doc.add(new TextField(field, line, Field.Store.YES));
                 }
             }
             if (writer.getConfig().getOpenMode() == OpenMode.CREATE) {
