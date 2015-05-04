@@ -3,6 +3,7 @@ package test.ue2.ir2015;
 import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
+import ue2.ir2015.Search;
 import ue2.ir2015.SearchFiles;
 
 /**
@@ -12,7 +13,7 @@ import ue2.ir2015.SearchFiles;
  * @version 1.0
  * @since <pre>Apr 30, 2015</pre>
  */
-public class SearchFilesTest {
+public class SearchTest {
 
     @Before
     public void before() throws Exception {
@@ -29,9 +30,9 @@ public class SearchFilesTest {
     public void testMain() throws Exception {
         for (int i = 1; i <= 20; ++i) {
 //        int i = 2;
-            String[] param = {"-index", "newsgroups_index", "-topic", "topic" + i};
+            String[] param = {"-index", "newsgroups_index", "-topic", "topics/topic" + i, "-output", "rankings.txt", "-experiment", "ex1", "-similarity", "bm25"};
             System.out.println("Search for Topic " + i);
-            SearchFiles.main(param);
+            Search.main(param);
         }
     }
 

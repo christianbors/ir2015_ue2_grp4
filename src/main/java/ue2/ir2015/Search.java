@@ -6,17 +6,13 @@ import org.apache.lucene.document.*;
 import org.apache.lucene.index.*;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopScoreDocCollector;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.Version;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,7 +21,7 @@ import java.util.List;
  */
 public class Search {
     public static void main(String[] args) throws IOException, ParseException {
-        Analyzer analyzer = new StandardAnalyzer();
+        /*Analyzer analyzer = new StandardAnalyzer();
 
         Directory index = new RAMDirectory();
         List<File> queue = new ArrayList<File>();
@@ -64,15 +60,49 @@ public class Search {
 
         // reader can only be closed when there
         // is no need to access the documents any more.
-        reader.close();
-    }
+        reader.close();*/
+        String usage =
+                "Usage:\tjava lucene-search [-index dir] [-topic file] [-similarity (bm25, bm25l)] [-output ranking] [-experiment name]";
+        if (args.length > 0 && ("-h".equals(args[0]) || "-help".equals(args[0]))) {
+            System.out.println(usage);
+            System.exit(0);
+        }
 
-    private static void addDoc(IndexWriter w, String title, String isbn) throws IOException {
-        Document doc = new Document();
-        doc.add(new TextField("title", title, Field.Store.YES));
+        String index = "";
+        String topicFilename = "";
+        String similarity = "default";
+        String outputFile = "";
+        String experimentName = "grp4";
+        for (int i = 0; i < args.length; i++) {
+            if ("-index".equals(args[i])) {
+                index = args[i + 1];
+                i++;
+            } else if ("-field".equals(args[i])) {
+//                field = args[i + 1];
+                i++;
+            } else if ("-topic".equals(args[i])) {
+                topicFilename = args[i + 1];
+                i++;
+            } else if ("-similarity".equals(args[i])) {
+                if (args[i+1].matches("bm25|bm25l")) {
+                    similarity = args[i + 1];
+                } else {
+                    System.out.println(usage);
+                    System.exit(0);
+                }
+                i++;
+            } else if ("-output".equals(args[i])) {
+                outputFile = args[i + 1];
+            } else if ("-experiment".equals(args[i])) {
+                experimentName += "_" + args[i + 1];
+            }
+        }
 
-        // use a string field for isbn because we don't want it tokenized
-        doc.add(new StringField("isbn", isbn, Field.Store.YES));
-        w.addDocument(doc);
+        // perform search, with a
+        SearchFiles searcher = new SearchFiles();
+        TopDocs topDocs = searcher.search(index, topicFilename, 100, similarity);
+        // display results and write them to a file if a filename was specified
+        searcher.writeResults(topicFilename, experimentName, topDocs, outputFile, 100);
+        searcher.close();
     }
 }

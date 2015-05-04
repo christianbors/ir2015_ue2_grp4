@@ -1,263 +1,172 @@
 package ue2.ir2015;
 
-        /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
-
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
+import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.queryparser.flexible.standard.QueryParserUtil;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.FSDirectory;
 
-/**
- * Simple command-line based search demo.
- */
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 public class SearchFiles {
 
-    private SearchFiles() {
+    private IndexReader indexReader;
+    private IndexSearcher indexSearcher;
+
+    public SearchFiles() {
+
     }
 
-    /**
-     * Simple command-line based search demo.
-     */
-    public static void main(String[] args) throws Exception {
-        String usage =
-                "Usage:\tjava org.apache.lucene.demo.SearchFiles [-index dir] [-field f] [-repeat n] [-topic file] [-query string] [-raw] [-paging hitsPerPage]\n\nSee http://lucene.apache.org/core/4_1_0/demo/ for details.";
-        if (args.length > 0 && ("-h".equals(args[0]) || "-help".equals(args[0]))) {
-            System.out.println(usage);
-            System.exit(0);
+    public TopDocs search(String index, String topicFile, int hits, String similarity) {
+
+        try {
+            this.indexReader = DirectoryReader.open(FSDirectory.open(Paths.get(index)));
+            indexSearcher = new IndexSearcher(indexReader);
+        } catch (IOException e) {
+            System.out.println("Index Directory not found: " + index);
+            e.printStackTrace();
         }
 
-        String index = "index";
-        String field = "contents";
-        String topicFolder = "topics/";
-        String topicFilename = null;
-        int repeat = 0;
-        boolean raw = false;
-//        String queryString = null;
-        int hitsPerPage = 100;
-
-        for (int i = 0; i < args.length; i++) {
-            if ("-index".equals(args[i])) {
-                index = args[i + 1];
-                i++;
-            } else if ("-field".equals(args[i])) {
-                field = args[i + 1];
-                i++;
-            } else if ("-topic".equals(args[i])) {
-                topicFilename = args[i + 1];
-                i++;
-//            } else if ("-query".equals(args[i])) {
-//                queryString = args[i + 1];
-//                i++;
-            } else if ("-repeat".equals(args[i])) {
-                repeat = Integer.parseInt(args[i + 1]);
-                i++;
-            } else if ("-raw".equals(args[i])) {
-                raw = true;
-            } else if ("-paging".equals(args[i])) {
-                hitsPerPage = Integer.parseInt(args[i + 1]);
-                if (hitsPerPage <= 0) {
-                    System.err.println("There must be at least 1 hit per page.");
-                    System.exit(1);
-                }
-                i++;
-            }
-        }
-        String topic = topicFolder + topicFilename;
-
-        IndexReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(index)));
-        IndexSearcher searcher = new IndexSearcher(reader);
         Analyzer analyzer = new StandardAnalyzer();
-//        searcher.setSimilarity(new BM25Similarity());
+        if (similarity.equals("bm25")) {
+            indexSearcher.setSimilarity(new BM25Similarity());
+        } else if (similarity.equals("bm25l")) {
+            indexSearcher.setSimilarity(new BM25LSimilarity());
+        }
 
         BufferedReader in = null;
-        if (topicFilename != null) {
-            in = Files.newBufferedReader(Paths.get(topic), StandardCharsets.UTF_8);
+        if (topicFile != null) {
+            try {
+                in = Files.newBufferedReader(Paths.get(topicFile), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                System.out.println("Topic File not found: " + Paths.get(topicFile));
+                e.printStackTrace();
+            }
         } else {
             in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         }
 
         String line;
-        String queryString = "";
+        String field;
         BooleanQuery booleanQuery = new BooleanQuery();
 
-        while ((line = in.readLine()) != null) {
+        try {
+            while ((line = in.readLine()) != null) {
 
-//            String line = queryString != null ? queryString : in.readLine();
-            line = line.trim();
-            if (line.length() > 0) {
+                line = line.trim();
+                if (line.length() > 0) {
 
-                field = "contents";
-                if (line.contains(":")) {
-                    if (!line.substring(0, line.indexOf(":")).contains(" ")) {
-                        // determine field if it is in any way specific and add it to the list of fields
-                        // to further use it in the MultiFieldQueryParser
-                        field = line.substring(0, line.indexOf(":")).toLowerCase();
-                        if (field.equals("article-i.d.")) {
-                            field = field.replace(".", "");
+                    field = "contents";
+                    if (line.contains(":")) {
+                        if (!line.substring(0, line.indexOf(":")).contains(" ")) {
+                            // determine field if it is in any way specific and add it to the list of fields
+                            // to further use it in the MultiFieldQueryParser
+                            field = line.substring(0, line.indexOf(":")).toLowerCase();
+                            if (field.equals("article-i.d.")) {
+                                field = field.replace(".", "");
+                            }
+                        }
+
+                        if (!field.equals("contents")) {
+                            line = line.substring(line.indexOf(":") + 2, line.length());
                         }
                     }
 
-                    if (!field.equals("contents")) {
-                        line = line.substring(line.indexOf(":") + 2, line.length());
+                    if (field.equals("path")) {
+                        String[] paths = line.split("!");
+                        for (String path : paths) {
+                            booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, path)), BooleanClause.Occur.SHOULD));
+                        }
+                    } else if (field.equals("newsgroups") || field.equals("keywords")) {
+                        String[] values = line.split(",");
+                        for (String value : values) {
+                            booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, value)), BooleanClause.Occur.SHOULD));
+                        }
+                    } else if (field.equals("xref")) {
+                        String[] xrefs = line.split(" ");
+                        for (String xref : xrefs) {
+                            booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, xref)), BooleanClause.Occur.SHOULD));
+                        }
+                    } else if (field.equals("references")) {
+                        String[] references = line.split(" |,");
+                        for (String ref : references) {
+                            booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, ref)), BooleanClause.Occur.SHOULD));
+                        }
+                    } else if (field.matches("date|from|message-id|organization|sender|followup-to|article-id|" +
+                            "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id|x-newsreader")) {
+                        Query tq = new TermQuery(new Term(field, line));
+                        booleanQuery.add(new BooleanClause(tq, BooleanClause.Occur.SHOULD));
+                    } else if (!field.equals("lines") && line.matches(".*[a-zA-Z]+.*")) {
+                        // ignore the field lines
+                        // field matches subject, or entry text
+                        // only add line content if it actually contains words
+                        booleanQuery.add(new BooleanClause(new QueryParser(field, analyzer)
+                                .parse(QueryParserUtil.escape(line)), BooleanClause.Occur.SHOULD));
                     }
                 }
-
-                if (field.equals("path")) {
-                    String[] paths = line.split("!");
-                    for (String path : paths) {
-                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, path)), BooleanClause.Occur.SHOULD));
-                    }
-                } else if (field.equals("newsgroups") || field.equals("keywords")) {
-                    String[] values = line.split(",");
-                    for (String value : values) {
-                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, value)), BooleanClause.Occur.SHOULD));
-                    }
-                } else if (field.equals("xref")) {
-                    String[] xrefs = line.split(" ");
-                    for (String xref : xrefs) {
-                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, xref)), BooleanClause.Occur.SHOULD));
-                    }
-                } else if (field.equals("references")) {
-                    String[] references = line.split(" |,");
-                    for (String ref : references) {
-                        booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, ref)), BooleanClause.Occur.SHOULD));
-                    }
-                } else if (field.matches("date|from|message-id|organization|sender|followup-to|article-id|" +
-                        "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id")) {
-                    Query tq = new TermQuery(new Term(field, line));
-                    booleanQuery.add(new BooleanClause(tq, BooleanClause.Occur.SHOULD));
-                } else if (!field.equals("lines")) {
-                    // ignore the field lines
-                    // field matches subject, or entry text
-                    booleanQuery.add(new BooleanClause(new QueryParser(field, analyzer)
-                            .parse(QueryParserUtil.escape(line)), BooleanClause.Occur.SHOULD));
-                }
-//
-////                if (!field.toLowerCase().equals("lines") && !field.toLowerCase().equals("date") && line.matches(".*[a-zA-Z]+.*")) {
-//                if (!field.toLowerCase().equals("lines") && line.matches(".*[a-zA-Z]+.*")) {
-//                    if (!queryString.isEmpty()) {
-//                        queryString += " OR ";
-//                    }
-//                    // get rid of the dangerous escape characters in the content text
-//                    queryString += field + ":(" + QueryParserUtil.escape(line) + ")";
-//                }
             }
+        } catch (IOException e) {
+            System.out.println("Error while reading: " + Paths.get(topicFile));
+//            e.printStackTrace();
+        } catch (ParseException e) {
+            System.out.println("Parsing failed");
+//            e.printStackTrace();
         }
-//
-//        QueryParser parser = new QueryParser(field, analyzer);
-//        Query query = parser.parse(queryString);
-//
-//        bq.add(new BooleanClause(query, BooleanClause.Occur.SHOULD));
-
-//        if (repeat > 0) {                           // repeat & time as benchmark
-//            Date start = new Date();
-//            for (int i = 0; i < repeat; i++) {
-//                searcher.search(booleanQuery, 100);
-//            }
-//            Date end = new Date();
-//            System.out.println("Time: " + (end.getTime() - start.getTime()) + "ms");
-//        }
-
-        doPagingSearch(in, searcher, booleanQuery, topicFilename, hitsPerPage);
-
-        reader.close();
+        TopDocs results = null;
+        try {
+            results = indexSearcher.search(booleanQuery, hits);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return results;
     }
 
-    /**
-     * This demonstrates a typical paging search scenario, where the search engine presents
-     * pages of size n to the user. The user can then go to the next page if interested in
-     * the next hits.
-     * <p>
-     * When the query is executed for the first time, then only enough results are collected
-     * to fill 5 result pages. If the user wants to page beyond this limit, then the query
-     * is executed another time and all hits are collected.
-     */
-    public static void doPagingSearch(BufferedReader in, IndexSearcher searcher, Query query,
-                                      String topicFilename, int hitsPerPage) throws IOException {
+    public void writeResults(String topicFilename, String experimentName, TopDocs topDocs, String outputFilename, int maxDocuments) {
 
-        // Collect enough docs to show 5 pages
-        TopDocs results = searcher.search(query, 5 * hitsPerPage);
-        ScoreDoc[] hits = results.scoreDocs;
+        ScoreDoc[] hits = topDocs.scoreDocs;
 
-        int numTotalHits = results.totalHits;
-        System.out.println(numTotalHits + " total matching documents");
+        try {
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFilename), "utf-8")) {
 
-        int start = 0;
-        int end = Math.min(numTotalHits, hitsPerPage);
+                for (int i = 0; i < maxDocuments; i++) {
+                    Document doc = indexSearcher.doc(hits[i].doc);
+                    String path = doc.get("path").replace("20_newsgroups_subset/", "");
+                    String topic = topicFilename.replace("topics/", "");
+                    if (path != null) {
+                        String rank = topic + " " +
+                                "Q0 " +
+                                path + " " +
+                                (i + 1) + " " +
+                                hits[i].score + " " +
+                                experimentName + "\n";
+                        System.out.print(rank);
+                        writer.write(rank);
+                    } else {
+                        System.out.println((i + 1) + ". " + "No path for this document");
+                    }
 
-        FileOutputStream out = new FileOutputStream("the-file-name");
-
-//        while (true) {
-//            if (end > hits.length) {
-//                System.out.println("Only results 1 - " + hits.length + " of " + numTotalHits + " total matching documents collected.");
-//                System.out.println("Collect more (y/n) ?");
-//                String line = in.readLine();
-//                if (line.length() == 0 || line.charAt(0) == 'n') {
-//                    break;
-//                }
-//
-//                hits = searcher.search(query, numTotalHits).scoreDocs;
-//            }
-
-        end = Math.min(hits.length, start + hitsPerPage);
-        try (Writer writer = new BufferedWriter(new FileWriter("ranking.txt", true))) {
-                //new OutputStreamWriter(new FileOutputStream("ranking.txt"), "utf-8"))) {
-
-            for (int i = start; i < end; i++) {
-
-                Document doc = searcher.doc(hits[i].doc);
-                String path = doc.get("path").replace("20_newsgroups_subset/", "");
-                if (path != null) {
-                    String rank = topicFilename + " " +
-                            "Q0 " +
-                            path + " " +
-                            (i + 1) + " " +
-                            hits[i].score + " " +
-                            "default\n";
-//                    System.out.println(rank);
-                    writer.write(rank);
-//                    System.out.println((i + 1) + ". " + path);
-//                    String title = doc.get("title");
-//                    if (title != null) {
-//                        System.out.println("   Title: " + doc.get("title"));
-//                    }
-                } else {
-                    System.out.println((i + 1) + ". " + "No path for this document");
                 }
-
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-//        }
+    }
+
+    public void close() {
+        try {
+            indexReader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
