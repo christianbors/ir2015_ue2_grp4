@@ -150,23 +150,24 @@ public class SearchFiles {
 
             }
             if (!outputFilename.isEmpty()) {
-                Writer writer = new BufferedWriter(new FileWriter(outputFilename, append));
-                for (int i = 0; i < maxDocuments; i++) {
-                    Document doc = indexSearcher.doc(hits[i].doc);
-                    String path = doc.get("docPath").replace("20_newsgroups_subset/", "");
-                    String topic = topicFilename.replace("topics/", "");
-                    if (path != null) {
-                        String rank = topic + " " +
-                                "Q0 " +
-                                path + " " +
-                                (i + 1) + " " +
-                                hits[i].score + " " +
-                                experimentName + "\n";
-                        writer.write(rank);
-                    } else {
-                        System.out.println((i + 1) + ". " + "No path for this document");
-                    }
+                try (Writer writer = new BufferedWriter(new FileWriter(outputFilename, append))) {
+                    for (int i = 0; i < maxDocuments; i++) {
+                        Document doc = indexSearcher.doc(hits[i].doc);
+                        String path = doc.get("docPath").replace("20_newsgroups_subset/", "");
+                        String topic = topicFilename.replace("topics/", "");
+                        if (path != null) {
+                            String rank = topic + " " +
+                                    "Q0 " +
+                                    path + " " +
+                                    (i + 1) + " " +
+                                    hits[i].score + " " +
+                                    experimentName + "\n";
+                            writer.write(rank);
+                        } else {
+                            System.out.println((i + 1) + ". " + "No path for this document");
+                        }
 
+                    }
                 }
             }
         } catch (IOException e) {
