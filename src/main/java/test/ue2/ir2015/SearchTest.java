@@ -29,8 +29,7 @@ public class SearchTest {
     @Test
     public void testMain() throws Exception {
         for (int i = 1; i <= 20; ++i) {
-//        int i = 2;
-            String[] param = {"-index", "newsgroups_index", "-topic", "topics/topic" + i, "-output", "rankings.txt", "-experiment", "ex1", "-similarity", "bm25"};
+            String[] param = {"-index", "newsgroups_index", "-documents", "20_newsgroups_subset", "-topic", "topics/topic" + i, "-output", "rankings_bm25.txt", "-experiment", "bm25", "-similarity", "bm25"};
             System.out.println("Search for Topic " + i);
             Search.main(param);
         }

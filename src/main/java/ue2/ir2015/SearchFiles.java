@@ -23,10 +23,6 @@ public class SearchFiles {
     private IndexReader indexReader;
     private IndexSearcher indexSearcher;
 
-    public SearchFiles() {
-
-    }
-
     public TopDocs search(String index, String topicFile, int hits, String similarity) {
 
         try {
@@ -102,7 +98,7 @@ public class SearchFiles {
                         for (String ref : references) {
                             booleanQuery.add(new BooleanClause(new TermQuery(new Term(field, ref)), BooleanClause.Occur.SHOULD));
                         }
-                    } else if (field.matches("date|from|message-id|organization|sender|followup-to|article-id|" +
+                    } else if (field.matches("from|message-id|organization|sender|followup-to|article-id|" +
                             "nntp-posting-host|reply-to|distribution|return-receipt-to|nf-from|nf-id|x-newsreader")) {
                         Query tq = new TermQuery(new Term(field, line));
                         booleanQuery.add(new BooleanClause(tq, BooleanClause.Occur.SHOULD));
@@ -131,16 +127,33 @@ public class SearchFiles {
         return results;
     }
 
-    public void writeResults(String topicFilename, String experimentName, TopDocs topDocs, String outputFilename, int maxDocuments) {
+    public void writeResults(String topicFilename, String experimentName, TopDocs topDocs, String outputFilename, int maxDocuments, boolean append) {
 
         ScoreDoc[] hits = topDocs.scoreDocs;
 
         try {
-            try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFilename), "utf-8")) {
+            for (int i = 0; i < maxDocuments; i++) {
+                Document doc = indexSearcher.doc(hits[i].doc);
+                String path = doc.get("docPath").replace("20_newsgroups_subset/", "");
+                String topic = topicFilename.replace("topics/", "");
+                if (path != null) {
+                    String rank = topic + " " +
+                            "Q0 " +
+                            path + " " +
+                            (i + 1) + " " +
+                            hits[i].score + " " +
+                            experimentName + "\n";
+                    System.out.print(rank);
+                } else {
+                    System.out.println((i + 1) + ". " + "No path for this document");
+                }
 
+            }
+            if (!outputFilename.isEmpty()) {
+                Writer writer = new BufferedWriter(new FileWriter(outputFilename, append));
                 for (int i = 0; i < maxDocuments; i++) {
                     Document doc = indexSearcher.doc(hits[i].doc);
-                    String path = doc.get("path").replace("20_newsgroups_subset/", "");
+                    String path = doc.get("docPath").replace("20_newsgroups_subset/", "");
                     String topic = topicFilename.replace("topics/", "");
                     if (path != null) {
                         String rank = topic + " " +
@@ -149,7 +162,6 @@ public class SearchFiles {
                                 (i + 1) + " " +
                                 hits[i].score + " " +
                                 experimentName + "\n";
-                        System.out.print(rank);
                         writer.write(rank);
                     } else {
                         System.out.println((i + 1) + ". " + "No path for this document");
