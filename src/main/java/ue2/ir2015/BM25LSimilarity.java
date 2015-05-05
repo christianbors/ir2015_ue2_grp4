@@ -18,6 +18,9 @@ import org.apache.lucene.util.SmallFloat;
  */
 // BM25LSimilarity Class
 // All methods from BM25Similarity are here so as to preserve functionality
+// BM25L Functionality implemented in the score() method of the BM25DocScorer class.
+// explainScore() function modified in the BM25LStats class for the new BM25L Similarity Class
+// Everything else remains the same.
 public class BM25LSimilarity extends Similarity {
 
     private final float d;
@@ -124,7 +127,6 @@ public class BM25LSimilarity extends Similarity {
     }
 
     @Override
-    // BM25L implementation (add d parameter to cache[i] ?
     public final SimWeight computeWeight(float queryBoost, CollectionStatistics collectionStats, TermStatistics... termStats)
     {
         Explanation idf = termStats.length == 1 ? idfExplain(collectionStats, termStats[0]) : idfExplain(collectionStats, termStats);
@@ -135,7 +137,7 @@ public class BM25LSimilarity extends Similarity {
 
         for(int i = 0; i < cache.length; i++)
         {
-            cache[i] = k1 * (((1-b) + b * decodeNormValue((byte) i) / avgdl) + d);
+            cache[i] = k1 * ((1-b) + b * decodeNormValue((byte) i) / avgdl);
         }
 
         return new BM25LStats(collectionStats.field(), idf, queryBoost, avgdl, cache);
@@ -165,11 +167,29 @@ public class BM25LSimilarity extends Similarity {
             this.norms = norms;
         }
 
+        // BM25L Implementation as in PDF
         @Override
         public float score(int doc, float freq)
         {
-            float norm = norms == null ? k1 : cache[(byte) norms.get(doc) & 0xFF];
-            return weightValue * freq / (freq + norm);
+            // c(q,D) => raw TF
+            // c'(q,D) => normalized TF
+            // paper formula:
+            // normalized TF = raw TF / 1 - b + b*|D|/avgdl
+            // 1 - b + d*|D|/avgdl = cache[(byte) norms.get(doc) & )xFF];
+            float norm = norms == null ? k1 : (freq / cache[(byte) norms.get(doc) & 0xFF]);
+
+            // if normalized tf == 0 => f'(q,D) = 0
+            if(norm == 0)
+            {
+                return 0.0f;
+            }
+            // else compute as in PDF
+            // c'(q,D) => normalized TF
+            // f'(q,D) = ((k1 + 1)*(c'(q,D) + d))/(k1+ (c'(q,D) + d))
+            else
+            {
+                return weightValue * (norm  + d) / (k1 + norm + d);
+            }
         }
 
         @Override
@@ -244,7 +264,7 @@ public class BM25LSimilarity extends Similarity {
             if(norms == null)
             {
                 tfNormExpl.addDetail(new Explanation(0, "parameter b (norms omitted for field)"));
-                tfNormExpl.setValue((freq.getValue() * (k1 +1 )) / (freq.getValue() + k1));
+                tfNormExpl.setValue(((freq.getValue() + d) * (k1 +1 )) / (freq.getValue() + k1));
             }
             else
             {
@@ -253,7 +273,7 @@ public class BM25LSimilarity extends Similarity {
                 tfNormExpl.addDetail(new Explanation(d, "parameter d"));
                 tfNormExpl.addDetail(new Explanation(stats.avgdl, "avgFieldLength"));
                 tfNormExpl.addDetail(new Explanation(doclen, "fieldLength"));
-                tfNormExpl.setValue((freq.getValue() * (k1 + 1)) / (freq.getValue() + k1 * ((1 - b + b * doclen/stats.avgdl) + d)));
+                tfNormExpl.setValue(((freq.getValue() + d) * (k1 + 1)) / (k1 + (freq.getValue()/(1 - b + b*doclen/stats.avgdl)) + d));
             }
 
             result.addDetail(tfNormExpl);
