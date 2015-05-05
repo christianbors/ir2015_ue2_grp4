@@ -9,7 +9,7 @@ import ue2.ir2015.SearchFiles;
 /**
  * SearchFiles Tester.
  *
- * @author <Authors name>
+ * @author christianbors
  * @version 1.0
  * @since <pre>Apr 30, 2015</pre>
  */
@@ -34,14 +34,5 @@ public class SearchTest {
             Search.main(param);
         }
     }
-
-    /**
-     * Method: doPagingSearch(BufferedReader in, IndexSearcher searcher, Query query, int hitsPerPage, boolean raw, boolean interactive)
-     */
-    @Test
-    public void testDoPagingSearch() throws Exception {
-//TODO: Test goes here... 
-    }
-
 
 } 
