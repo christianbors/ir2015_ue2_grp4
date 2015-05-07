@@ -13,7 +13,12 @@ public class Search {
 
         String usage =
                 "Usage:\tjava lucene-search [-index dir] [-documents dir] [-updateIndex] [-topic file] [-similarity (bm25, bm25l)] [-output ranking] [-experiment name]";
-        if (args.length > 0 && ("-h".equals(args[0]) || "-help".equals(args[0]))) {
+        try {
+            if (args.length == 0 || (args.length > 0 && ("-h".equals(args[0])) || "-help".equals(args[0]))) {
+                System.out.println(usage);
+                System.exit(0);
+            }
+        } catch (IndexOutOfBoundsException e) {
             System.out.println(usage);
             System.exit(0);
         }
